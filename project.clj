@@ -11,7 +11,8 @@
                  [local/RedshiftJDBC41 "1.1.10.1010"]
                  [org.apache.hadoop/hadoop-hdfs "2.6.0-cdh5.4.5"]
                  [org.apache.hadoop/hadoop-common "2.6.0-cdh5.4.5" :exclusions [org.apache.httpcomponents/httpcore]]
-                 [org.clojure/tools.nrepl "0.2.11"]]
+                 ;[org.clojure/tools.nrepl "0.2.11"]
+                 [org.clojure/tools.cli "0.3.3"]]
 
   :repositories [ ["cloudera" "https://repository.cloudera.com/artifactory/cloudera-repos"] ]
 
