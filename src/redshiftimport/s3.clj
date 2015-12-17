@@ -10,7 +10,8 @@
            [com.amazonaws.services.s3 AmazonS3Client]
            [com.amazonaws.services.s3.model PutObjectRequest ObjectMetadata PutObjectResult]
            [com.amazonaws.auth BasicAWSCredentials]
-           [com.amazonaws.regions Region RegionUtils]))
+           [com.amazonaws.regions Region RegionUtils]
+           [com.amazonaws.event ProgressListener]))
 
 
 (defrecord Ctx [^AmazonS3Client client])
@@ -21,18 +22,27 @@
                                       (.setContentLength (int content-len)))))
 
 
-(defn list [{:keys [^AmazonS3Client client]} bucket k]
-  (map #(.getKey %) (-> client
-                        (.listObjects (str bucket) (str k))
-                        .getObjectSummaries)))
+(defn as-s3-fqn
+  "Ensures that the filename starts with s3://"
+  [^String file]
+  (if (.startsWith file "s3://")
+    file
+    (apply str "s3://" (drop-while #(= \/ %) file))))
 
 (defn stream->s3!
   "This operation copy a input stream to a s3 bucket,
-   throws an exception if any error"
+   throws an exception if any error
+   calls close in the InputStream after its used"
   [{:keys [^AmazonS3Client client]} ^InputStream in content-len {:keys [bucket file]}]
   {:pre [client in (integer? content-len) (string? bucket) (string? file)]}
-  (.putObject client (put-req bucket file in content-len)))
+  (try
+    (.putObject client (put-req bucket file in content-len))
+    (finally
+      (.close in))))
 
+(defn delete-file! [{:keys [^AmazonS3Client client]} bucket file]
+  {:pre [client bucket file]}
+  (.deleteObject client (str bucket) (str file)))
 
 (defn connect! [{:keys [access-key secret-key region]}]
   {:pre [(string? access-key) (string? secret-key) (string? region)]}

@@ -5,8 +5,9 @@
             [clojure.tools.cli :refer [parse-opts]])
   (:gen-class)
   (:import [java.util.concurrent Executors ExecutorService Future]
-           [java.util.concurrent.atomic AtomicBoolean]
-           [com.amazonaws.regions RegionUtils]))
+           [com.amazonaws.regions RegionUtils]
+           [com.amazonaws.util StringInputStream]
+           [java.io InputStream]))
 
 
 (defn hdfs-file->s3
@@ -21,11 +22,11 @@
   (let [file-name (str s3path "/" (hdfs/file-name hdfs-file) "_" i)
         input (hdfs/input-stream hdfs-ctx hdfs-file)
         content-len (hdfs/content-length hdfs-ctx hdfs-file)]
-    (prn "put file " file-name content-len)
+    (prn "load to s3 file " (str s3bucket "/" file-name) content-len)
 
     (s3/stream->s3! s3-ctx input content-len {:bucket s3bucket :file file-name})
 
-    (str s3bucket "/" file-name)))
+    (s3/as-s3-fqn (str s3bucket "/" file-name))))
 
 (defn pmap2
   "Run the coll in its own ExecutorService and return the result of (map f coll)"
@@ -39,7 +40,9 @@
         deref
         (transduce (comp
                      (map #(.submit exec (submit-f (swap! counter-a inc) %)))
-                     (map #(delay (.get ^Future %))))
+                     (map #(delay (do
+                                    (prn "Waiting on future " %)
+                                    (.get ^Future %)))))
                    conj
                    coll))
       (finally
@@ -47,11 +50,15 @@
 
 (defn hdfs->s3
   "Copy all the hdfs files identified by the glob to the s3path"
-  [hdfs-ctx s3-ctx hdfs-dir s3bucket s3path]
-  (prn "HDFS DIR " hdfs-dir)
-  (prn "LIST Files " )
+  [hdfs-ctx s3-ctx threads hdfs-dir s3bucket s3path]
   (let [hdfs-files (hdfs/list-paths hdfs-ctx hdfs-dir)]
-    (pmap2 4 #(hdfs-file->s3 hdfs-ctx %2 s3-ctx s3bucket s3path %1) hdfs-files)))
+    (try
+      (pmap2 threads #(hdfs-file->s3 hdfs-ctx %2 s3-ctx s3bucket s3path %1) hdfs-files)
+      (finally
+        (prn "Done copying to s3")))))
+
+(defn create-manifest [s3-files]
+  (redshift/manifest-file s3-files))
 
 (defn exec [{:keys [redshift-url
                     redshift-user
@@ -63,14 +70,26 @@
                     s3-bucket
                     s3-path
                     hdfs-url
-                    hdfs-path]}]
-  (let []
-    (let [s3-ctx (s3/connect! {:access-key s3-access :secret-key s3-secret :region s3-region})
-          hdfs-ctx (hdfs/connect! {:default-fs hdfs-url})
-          red-ctx (redshift/connect! redshift-url redshift-user redshift-pwd)
-          s3-files (hdfs->s3 hdfs-ctx s3-ctx hdfs-path s3-bucket s3-path)]
+                    hdfs-path
+                    threads
+                    delete-s3]}]
+  (let [s3-ctx (s3/connect! {:access-key s3-access :secret-key s3-secret :region s3-region})
+        hdfs-ctx (hdfs/connect! {:default-fs hdfs-url})
+        red-ctx (redshift/connect! redshift-url redshift-user redshift-pwd)
+        s3-files (hdfs->s3 hdfs-ctx s3-ctx threads hdfs-path s3-bucket s3-path)
+        manifest (create-manifest s3-files)
+        ^InputStream manifest-input (StringInputStream. ^String manifest)
+        manifest-filename (str s3-path "/manifest_" (System/nanoTime))
+        manifest-fqn (s3/as-s3-fqn (str s3-bucket "/"  manifest-filename))]
 
-      s3-files)))
+    (prn "Completed upload of " (count s3-files) " files to s3")
+    (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename})
+
+    (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret)
+    (when delete-s3
+      (doseq [s3-file (conj s3-files manifest-filename)]
+        (s3/delete-file! s3-ctx s3-bucket s3-file)))
+    (prn "done")))
 
 ;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;CLI
@@ -88,6 +107,12 @@
    ["-z" "--s3-path s3-path" "S3 path key"]
    ["-y" "--hdfs-url fs-default" "Default hdfs name e.g hdfs://mynamenode"]
    ["-d" "--hdfs-path hdfs-path" "Should be a glob e.g /tmp/files/*"]
+   ["-q" "--threads threads" "Number of threads to use for uploads to s3"
+    :default 4
+    :parse-fn #(Integer/parseInt %)]
+
+   ["-delete-s3" "--delete-s3" "if specified the s3 uploads are deleted after uploading"]
+
    ["-h" "--help"]])
 
 (defn prn-help [data]
