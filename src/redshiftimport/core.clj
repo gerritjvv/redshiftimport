@@ -72,7 +72,8 @@
                     hdfs-url
                     hdfs-path
                     threads
-                    delete-s3]}]
+                    delete-s3
+                    disable-redshift]}]
   (let [s3-ctx (s3/connect! {:access-key s3-access :secret-key s3-secret :region s3-region})
         hdfs-ctx (hdfs/connect! {:default-fs hdfs-url})
         red-ctx (redshift/connect! redshift-url redshift-user redshift-pwd)
@@ -83,9 +84,10 @@
         manifest-fqn (s3/as-s3-fqn (str s3-bucket "/"  manifest-filename))]
 
     (prn "Completed upload of " (count s3-files) " files to s3")
-    (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename})
+    (when (not disable-redshift)
+      (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename})
+      (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret))
 
-    (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret)
     (when delete-s3
       (doseq [s3-file (conj s3-files manifest-filename)]
         (s3/delete-file! s3-ctx s3-bucket s3-file)))
@@ -112,6 +114,8 @@
     :parse-fn #(Integer/parseInt %)]
 
    ["-delete-s3" "--delete-s3" "if specified the s3 uploads are deleted after uploading"]
+
+   ["-disable-redshift" "--disable-redshift" "if specified the the files are not uploaded to redshift"]
 
    ["-h" "--help"]])
 
