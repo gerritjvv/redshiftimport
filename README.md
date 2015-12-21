@@ -25,7 +25,7 @@ java -jar ./redshiftimport-0.1.0-SNAPSHOT-standalone.jar \
 ### Only S3 Loading (disable redshift)
 
 use the ```--disable-redshift``` flag to only load to s3.  
-Note that the manifest files will not be loaded either.  
+Note that the manifest files will still be loaded.  
 
 ## Trouble Shooting
 

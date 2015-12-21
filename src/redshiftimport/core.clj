@@ -84,8 +84,9 @@
         manifest-fqn (s3/as-s3-fqn (str s3-bucket "/"  manifest-filename))]
 
     (prn "Completed upload of " (count s3-files) " files to s3")
+    (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename})
+
     (when (not disable-redshift)
-      (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename})
       (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret))
 
     (when delete-s3
