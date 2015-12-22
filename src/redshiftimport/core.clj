@@ -86,7 +86,7 @@
                     disable-redshift]}]
   (let [s3-ctx (s3/connect! {:access-key s3-access :secret-key s3-secret :region s3-region})
         hdfs-ctx (hdfs/connect! {:default-fs hdfs-url})
-        red-ctx (redshift/connect! redshift-url redshift-user redshift-pwd)
+        red-ctx (when (not disable-redshift) (redshift/connect! redshift-url redshift-user redshift-pwd))
         s3-files (hdfs->s3 hdfs-ctx s3-ctx threads hdfs-path s3-bucket s3-path)
         manifest (create-manifest s3-files)
         ^InputStream manifest-input (StringInputStream. ^String manifest)
