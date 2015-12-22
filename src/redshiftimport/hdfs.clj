@@ -2,6 +2,7 @@
   ^{:doc "Reading and providing different inputstreams for files in a directory or single files
           supports globs"}
   redshiftimport.hdfs
+  (:require [clojure.string :as string])
   (:import [org.apache.hadoop.fs FileSystem Path FileStatus]
            [org.apache.hadoop.conf Configuration]
            [java.io InputStream File]))
@@ -23,6 +24,19 @@
   (if (instance? Path file)
     file
     (Path. (str file))))
+
+(defn join-last [c depth]
+  (string/join "_" (take-last depth c)))
+
+(defn choose-hdfs-prefix-dir
+  "Return a directory name based on the file name taking is parent's last depth directories
+   and joining with '_' e.g a/b/c/file depth 2 will give b_c"
+  [file depth]
+  (-> (File. file)
+      (.getParentFile)
+      (.toString)
+      (string/split #"/")
+      (join-last depth)))
 
 (defn file-name [file]
   (.getName (File. (.toString file))))

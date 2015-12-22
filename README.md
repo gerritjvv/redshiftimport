@@ -22,6 +22,14 @@ java -jar ./redshiftimport-0.1.0-SNAPSHOT-standalone.jar \
 
 ```
 
+### Repeatable S3 Loads
+
+The HDFS directory can be used to create a unique file name for the s3 upload into the same bucket.  
+This allows us to re-run s3 uploads without creating duplicate s3 files.
+
+Specify the ```hdfs-s3-prefix-depth``` option.
+
+
 ### Only S3 Loading (disable redshift)
 
 use the ```--disable-redshift``` flag to only load to s3.  

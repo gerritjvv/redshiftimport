@@ -22,7 +22,6 @@
   (PutObjectRequest. bucket file in (doto (ObjectMetadata.)
                                       (.setContentLength (int content-len)))))
 
-
 (defn as-s3-fqn
   "Ensures that the filename starts with s3://"
   [^String file]
