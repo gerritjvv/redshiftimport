@@ -35,7 +35,7 @@
    or a unique file name created from start-ts and i"
   [hdfs-file hdfs-s3-prefix-depth start-ts i]
   (if hdfs-s3-prefix-depth
-    (str (hdfs/choose-hdfs-prefix-dir hdfs-file hdfs-s3-prefix-depth) "_" (hfds/file-name hdfs-file))
+    (str (hdfs/choose-hdfs-prefix-dir hdfs-file hdfs-s3-prefix-depth) "_" (hdfs/file-name hdfs-file))
     (str (hdfs/file-name hdfs-file) "_" start-ts "_" i)))
 
 (defn hdfs-file->s3
@@ -154,7 +154,7 @@
 
    ["-disable-redshift" "--disable-redshift" "if specified the the files are not uploaded to redshift"]
    ["-hdfs-s3-prefix-depth" " number" "if specified the file name is <number levels of hdfs dir compressed e.g /a/b/c/file can be at number 2 b_c>_<hdfs_file_name>"
-    :parse-fn #(when % (Integer/p--hdfs-s3-prefix-deptharseInt %))]
+    :parse-fn #(when % (Integer/parseInt %))]
 
    ["-h" "--help"]])
 
