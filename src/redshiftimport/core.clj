@@ -28,7 +28,7 @@
 
    return the s3bucket/filenameuploaded"
   [hdfs-ctx hdfs-file s3-ctx s3bucket s3path start-ts i]
-  (let [file-name (str s3path "/" (hdfs/file-name hdfs-file) "_" start-ts + "_" i)
+  (let [file-name (str s3path "/" (hdfs/file-name hdfs-file) "_" start-ts "_" i)
         input (hdfs/input-stream hdfs-ctx hdfs-file)
         content-len (hdfs/content-length hdfs-ctx hdfs-file)]
     (prn "load to s3 file " (str s3bucket "/" file-name) content-len)
