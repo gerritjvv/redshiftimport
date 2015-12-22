@@ -48,12 +48,16 @@
    return the s3bucket/filenameuploaded"
   [hdfs-ctx hdfs-file s3-ctx s3bucket s3path hdfs-s3-prefix-depth start-ts i]
   (let [file-name (str s3path "/" (choose-file-name hdfs-file hdfs-s3-prefix-depth start-ts i))
-        content-len (hdfs/content-length hdfs-ctx hdfs-file)]
+        content-len (hdfs/content-length hdfs-ctx hdfs-file)
+        input (hdfs/input-stream hdfs-ctx hdfs-file)]
     (prn "load to s3 file " (sanitise-s3-path (str s3bucket "/" file-name)) content-len)
 
-    (with-open [input (hdfs/input-stream hdfs-ctx hdfs-file)]
-      (s3/wait-on-upload! (s3/stream->s3! s3-ctx input content-len {:bucket (sanitise-s3-path (remove-trailing-slash s3bucket)) :file (sanitise-s3-path (remove-starting-slash file-name))})))
+    (try
+      (prn "calling s3/stream")
+      (s3/wait-on-upload! (s3/stream->s3! s3-ctx input content-len {:bucket (sanitise-s3-path (remove-trailing-slash s3bucket)) :file (sanitise-s3-path (remove-starting-slash file-name))}))
 
+      (finally
+        (.close ^InputStream input)))
     (s3/as-s3-fqn (sanitise-s3-path (str s3bucket "/" file-name)))))
 
 (defn pmap2
@@ -82,7 +86,7 @@
   [hdfs-ctx s3-ctx threads hdfs-dir s3bucket s3path hdfs-s3-prefix-depth]
   (let [hdfs-files (hdfs/list-paths hdfs-ctx hdfs-dir)]
     (try
-      (pmap2 threads #(hdfs-file->s3 hdfs-ctx %3 s3-ctx s3bucket s3path hdfs-s3-prefix-depth %1 %2) hdfs-files)
+      (doall (pmap2 threads #(hdfs-file->s3 hdfs-ctx %3 s3-ctx s3bucket s3path hdfs-s3-prefix-depth %1 %2) hdfs-files))
       (finally
         (prn "Done copying to s3")))))
 

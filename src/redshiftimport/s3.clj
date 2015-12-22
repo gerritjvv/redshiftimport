@@ -20,6 +20,8 @@
 (defrecord Ctx [^AmazonS3Client client ^TransferManager transfer-manager])
 (defrecord S3File [bucket file])
 
+(defonce TEN-MB 10485760)
+
 (defn ^PutObjectRequest put-req [^String bucket ^String file ^InputStream in content-len]
   (PutObjectRequest. bucket file in (doto (ObjectMetadata.)
                                       (.setContentLength (int content-len)))))
@@ -44,7 +46,11 @@
    does not close the InputStream"
   [{:keys [^TransferManager transfer-manager]} ^InputStream in content-len {:keys [bucket file]}]
   {:pre [transfer-manager in (integer? content-len) (string? bucket) (string? file)]}
-  (.upload transfer-manager bucket file in (doto (ObjectMetadata.) (.setContentLength (int content-len)))))
+  ;; request.getRequestClientOptions.setReadLimit(TEN_MB)
+  ;;uploader.getConfiguration.setMultipartUploadThreshold(TEN_MB)
+  (let [^PutObjectRequest putreq (put-req bucket file in content-len)]
+    (.setReadLimit (.getRequestClientOptions putreq) (int TEN-MB))
+    (.upload transfer-manager putreq)))
 
 (defn wait-on-upload!
   "Wait on the upload object returned from stream->s3!"
@@ -65,7 +71,8 @@
         s3client (doto
                    (AmazonS3Client. ^BasicAWSCredentials creds)
                    (.setRegion ^Region region))
-        ]
-    (->Ctx s3client (TransferManager. s3client exec1))))
+        ^TransferManager transfer-manager (TransferManager. s3client exec1)]
+    (.setMultipartUploadThreshold (.getConfiguration transfer-manager) (int TEN-MB))
+    (->Ctx s3client transfer-manager)))
 
 
