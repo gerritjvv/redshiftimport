@@ -6,12 +6,13 @@
       then use list or stream->s3! to list or load files
     "}
   redshiftimport.s3
-  (:import [java.io InputStream]
+  (:import [java.io InputStream ByteArrayInputStream]
            [com.amazonaws.services.s3 AmazonS3Client]
            [com.amazonaws.services.s3.model PutObjectRequest ObjectMetadata PutObjectResult]
            [com.amazonaws.auth BasicAWSCredentials]
            [com.amazonaws.regions Region RegionUtils]
-           [com.amazonaws.event ProgressListener]))
+           [com.amazonaws.event ProgressListener]
+           [org.apache.commons.lang StringUtils]))
 
 
 (defrecord Ctx [^AmazonS3Client client])
@@ -29,6 +30,11 @@
     file
     (apply str "s3://" (drop-while #(= \/ %) file))))
 
+(defn test-input [] (ByteArrayInputStream. (.getBytes "TESTFILE" "UTF-8")))
+
+(defn remote-all-slashes [^String s]
+  (StringUtils/replace s "/" ""))
+
 (defn stream->s3!
   "This operation copy a input stream to a s3 bucket,
    throws an exception if any error
@@ -36,7 +42,7 @@
   [{:keys [^AmazonS3Client client]} ^InputStream in content-len {:keys [bucket file]}]
   {:pre [client in (integer? content-len) (string? bucket) (string? file)]}
   (try
-    (.putObject client (put-req bucket file in content-len))
+    (.putObject client (put-req (remote-all-slashes bucket) file in content-len))
     (finally
       (.close in))))
 

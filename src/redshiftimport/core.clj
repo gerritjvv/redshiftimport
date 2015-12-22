@@ -17,6 +17,17 @@
 (defn remove-s3-prefix [s]
   (StringUtils/replace (str s) "s3:" ""))
 
+(defn remove-trailing-slash [s]
+  (if (.endsWith (str s) "/")
+    (.substring (str s) 0 (dec (count s)))
+    s))
+
+(defn remove-starting-slash [s]
+  (if (.startsWith (str s) "/")
+    (.substring (str s) 1)
+    s))
+
+
 (def sanitise-s3-path (comp remove-s3-prefix remove-double-slashes))
 
 (defn hdfs-file->s3
@@ -31,9 +42,9 @@
   (let [file-name (str s3path "/" (hdfs/file-name hdfs-file) "_" start-ts "_" i)
         input (hdfs/input-stream hdfs-ctx hdfs-file)
         content-len (hdfs/content-length hdfs-ctx hdfs-file)]
-    (prn "load to s3 file " (str s3bucket "/" file-name) content-len)
+    (prn "load to s3 file " (sanitise-s3-path (str s3bucket "/" file-name)) content-len)
 
-    (s3/stream->s3! s3-ctx input content-len {:bucket (sanitise-s3-path s3bucket) :file (sanitise-s3-path file-name)})
+    (s3/stream->s3! s3-ctx input content-len {:bucket (sanitise-s3-path (remove-trailing-slash s3bucket)) :file (sanitise-s3-path (remove-starting-slash file-name))})
 
     (s3/as-s3-fqn (sanitise-s3-path (str s3bucket "/" file-name)))))
 
