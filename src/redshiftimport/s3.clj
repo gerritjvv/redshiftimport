@@ -49,7 +49,7 @@
   ;; request.getRequestClientOptions.setReadLimit(TEN_MB)
   ;;uploader.getConfiguration.setMultipartUploadThreshold(TEN_MB)
   (let [^PutObjectRequest putreq (put-req bucket file in content-len)]
-    (.setReadLimit (.getRequestClientOptions putreq) (int TEN-MB))
+    (.setReadLimit (.getRequestClientOptions putreq) (int (* TEN-MB 5)))
     (.upload transfer-manager putreq)))
 
 (defn wait-on-upload!
@@ -72,7 +72,7 @@
                    (AmazonS3Client. ^BasicAWSCredentials creds)
                    (.setRegion ^Region region))
         ^TransferManager transfer-manager (TransferManager. s3client exec1)]
-    (.setMultipartUploadThreshold (.getConfiguration transfer-manager) (int TEN-MB))
+    (.setMultipartUploadThreshold (.getConfiguration transfer-manager) (int (* TEN-MB 40)))
     (->Ctx s3client transfer-manager)))
 
 
