@@ -49,7 +49,8 @@
   ;; request.getRequestClientOptions.setReadLimit(TEN_MB)
   ;;uploader.getConfiguration.setMultipartUploadThreshold(TEN_MB)
   (let [^PutObjectRequest putreq (put-req bucket file in content-len)]
-    (.setReadLimit (.getRequestClientOptions putreq) (int (* TEN-MB 5)))
+    ;; can't use in hadoop-aws yet this method doesn't exist
+    ;(.setReadLimit (.getRequestClientOptions putreq) (int (* TEN-MB 5)))
     (.upload transfer-manager putreq)))
 
 (defn wait-on-upload!
