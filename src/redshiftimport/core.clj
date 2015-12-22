@@ -49,17 +49,21 @@
   [hdfs-ctx hdfs-file s3-ctx s3bucket s3path hdfs-s3-prefix-depth start-ts i]
   (let [file-name (str s3path "/" (choose-file-name hdfs-file hdfs-s3-prefix-depth start-ts i))
         input (hdfs/input-stream hdfs-ctx hdfs-file)
-        content-len (hdfs/content-length hdfs-ctx hdfs-file)]
+        content-len (hdfs/content-length hdfs-ctx hdfs-file)
+        retry-limit 3]
     (prn "load to s3 file " (sanitise-s3-path (str s3bucket "/" file-name)) content-len)
 
     (loop [i 0]
       (let [res (try
                   (s3/stream->s3! s3-ctx input content-len {:bucket (sanitise-s3-path (remove-trailing-slash s3bucket)) :file (sanitise-s3-path (remove-starting-slash file-name))})
-                  true
-                  (catch Exception e (do (.printStackTrace e) nil)))]
-        (if-not (and res (< i 3))
-          (recur (inc i))
-          (throw (RuntimeException. (str "S3 Failure, retries exceeded"))))))
+                  (catch Exception e (do
+                                       (prn "Failed upload " e " retrying " i " of " retry-limit)
+                                       (.printStackTrace e) nil)))]
+        (if-not res
+          (if (< i retry-limit)
+            (recur (inc i))
+            (throw (RuntimeException. (str "S3 Failure, retries exceeded"))))
+          res)))
 
     (s3/as-s3-fqn (sanitise-s3-path (str s3bucket "/" file-name)))))
 
@@ -153,7 +157,7 @@
    ["-delete-s3" "--delete-s3" "if specified the s3 uploads are deleted after uploading"]
 
    ["-disable-redshift" "--disable-redshift" "if specified the the files are not uploaded to redshift"]
-   ["-hdfs-s3-prefix-depth" " number" "if specified the file name is <number levels of hdfs dir compressed e.g /a/b/c/file can be at number 2 b_c>_<hdfs_file_name>"
+   ["-hdfs-s3-prefix-depth" "--hdfs-s3-prefix-depth number" "if specified the file name is <number levels of hdfs dir compressed e.g /a/b/c/file can be at number 2 b_c>_<hdfs_file_name>"
     :parse-fn #(when % (Integer/parseInt %))]
 
    ["-h" "--help"]])

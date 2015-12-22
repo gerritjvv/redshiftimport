@@ -32,7 +32,7 @@
   "Return a directory name based on the file name taking is parent's last depth directories
    and joining with '_' e.g a/b/c/file depth 2 will give b_c"
   [file depth]
-  (-> (File. file)
+  (-> (File. (.toString file))
       (.getParentFile)
       (.toString)
       (string/split #"/")
