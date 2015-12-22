@@ -12,10 +12,12 @@
            [com.amazonaws.auth BasicAWSCredentials]
            [com.amazonaws.regions Region RegionUtils]
            [com.amazonaws.event ProgressListener]
-           [org.apache.commons.lang StringUtils]))
+           [org.apache.commons.lang StringUtils]
+           [java.util.concurrent ExecutorService Executors]
+           [com.amazonaws.services.s3.transfer TransferManager Upload]))
 
 
-(defrecord Ctx [^AmazonS3Client client])
+(defrecord Ctx [^AmazonS3Client client ^TransferManager transfer-manager])
 (defrecord S3File [bucket file])
 
 (defn ^PutObjectRequest put-req [^String bucket ^String file ^InputStream in content-len]
@@ -34,28 +36,36 @@
 (defn remote-all-slashes [^String s]
   (StringUtils/replace s "/" ""))
 
-(defn stream->s3!
+(defn
+  ^Upload
+  stream->s3!
   "This operation copy a input stream to a s3 bucket,
    throws an exception if any error
-   calls close in the InputStream after its used"
-  [{:keys [^AmazonS3Client client]} ^InputStream in content-len {:keys [bucket file]}]
-  {:pre [client in (integer? content-len) (string? bucket) (string? file)]}
-  (try
-    (.putObject client (put-req (remote-all-slashes bucket) file in content-len))
-    (finally
-      (.close in))))
+   does not close the InputStream"
+  [{:keys [^TransferManager transfer-manager]} ^InputStream in content-len {:keys [bucket file]}]
+  {:pre [transfer-manager in (integer? content-len) (string? bucket) (string? file)]}
+  (.upload transfer-manager bucket file in (doto (ObjectMetadata.) (.setContentLength (int content-len)))))
+
+(defn wait-on-upload!
+  "Wait on the upload object returned from stream->s3!"
+  [^Upload upload]
+  (.waitForUploadResult upload))
 
 (defn delete-file! [{:keys [^AmazonS3Client client]} bucket file]
   {:pre [client bucket file]}
   (.deleteObject client (str bucket) (str file)))
 
-(defn connect! [{:keys [access-key secret-key region]}]
+(defn connect! [{:keys [access-key secret-key region exec]}]
   {:pre [(string? access-key) (string? secret-key) (string? region)]}
-  (let [creds    (BasicAWSCredentials. (str access-key) (str secret-key))
+  (let [exec1 (if exec exec (Executors/newFixedThreadPool 4))
+        creds    (BasicAWSCredentials. (str access-key) (str secret-key))
         _        (do (prn (map str (RegionUtils/getRegions))))
         region   (RegionUtils/getRegion (str region))
 
         s3client (doto
                    (AmazonS3Client. ^BasicAWSCredentials creds)
-                   (.setRegion ^Region region))]
-    (->Ctx s3client)))
+                   (.setRegion ^Region region))
+        ]
+    (->Ctx s3client (TransferManager. s3client exec1))))
+
+

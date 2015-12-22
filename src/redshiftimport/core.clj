@@ -48,22 +48,11 @@
    return the s3bucket/filenameuploaded"
   [hdfs-ctx hdfs-file s3-ctx s3bucket s3path hdfs-s3-prefix-depth start-ts i]
   (let [file-name (str s3path "/" (choose-file-name hdfs-file hdfs-s3-prefix-depth start-ts i))
-        input (hdfs/input-stream hdfs-ctx hdfs-file)
-        content-len (hdfs/content-length hdfs-ctx hdfs-file)
-        retry-limit 3]
+        content-len (hdfs/content-length hdfs-ctx hdfs-file)]
     (prn "load to s3 file " (sanitise-s3-path (str s3bucket "/" file-name)) content-len)
 
-    (loop [i 0]
-      (let [res (try
-                  (s3/stream->s3! s3-ctx input content-len {:bucket (sanitise-s3-path (remove-trailing-slash s3bucket)) :file (sanitise-s3-path (remove-starting-slash file-name))})
-                  (catch Exception e (do
-                                       (prn "Failed upload " e " retrying " i " of " retry-limit)
-                                       (.printStackTrace e) nil)))]
-        (if-not res
-          (if (< i retry-limit)
-            (recur (inc i))
-            (throw (RuntimeException. (str "S3 Failure, retries exceeded"))))
-          res)))
+    (with-open [input (hdfs/input-stream hdfs-ctx hdfs-file)]
+      (s3/wait-on-upload! (s3/stream->s3! s3-ctx input content-len {:bucket (sanitise-s3-path (remove-trailing-slash s3bucket)) :file (sanitise-s3-path (remove-starting-slash file-name))})))
 
     (s3/as-s3-fqn (sanitise-s3-path (str s3bucket "/" file-name)))))
 
@@ -126,7 +115,7 @@
 
     (prn "Completed upload of " (count s3-files) " files to s3")
     (when (not disable-redshift)
-      (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename})
+      (s3/wait-on-upload! (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename}))
       (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret))
 
     (when delete-s3
