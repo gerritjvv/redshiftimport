@@ -93,13 +93,13 @@
 (defn create-manifest [s3-files]
   (redshift/manifest-file s3-files))
 
-(defn load-manifest [red-ctx s3-ctx redshift-table manifest s3-path s3-bucket s3-access s3-secret]
+(defn load-manifest [red-ctx s3-ctx redshift-table manifest s3-path s3-bucket s3-access s3-secret format]
   (let [^InputStream manifest-input (StringInputStream. ^String manifest)
         manifest-filename (str s3-path "/manifest_" (System/nanoTime))
         manifest-fqn (s3/as-s3-fqn (str s3-bucket "/"  manifest-filename))]
     (prn "uploading manifest")
     (s3/wait-on-upload! (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename}))
-    (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret)
+    (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret format)
     (prn "done loading manifest")))
 
 (defn exec [{:keys [redshift-url
@@ -117,7 +117,8 @@
                     threads
                     delete-s3
                     disable-redshift
-                    manifest-size]}]
+                    manifest-size
+                    format]}]
   (let [manifest-size (if manifest-size manifest-size 20)
         s3-ctx (s3/connect! {:access-key s3-access :secret-key s3-secret :region s3-region})
         hdfs-ctx (hdfs/connect! {:default-fs hdfs-url})
@@ -128,7 +129,7 @@
     (prn "Completed upload of " (count s3-files) " files to s3")
     (when (not disable-redshift)
       (doseq [manifest manifests]
-        (load-manifest red-ctx s3-ctx redshift-table manifest s3-path s3-bucket s3-access s3-secret)))
+        (load-manifest red-ctx s3-ctx redshift-table manifest s3-path s3-bucket s3-access s3-secret format)))
 
     (when delete-s3
       (doseq [s3-file s3-files]
@@ -144,12 +145,13 @@
    ["-p" "--redshift-pwd redshift-pwd" "JDBC Redshift Password"]
    ["-manifest-size" "--manifest-size number" "Number of files grouped in each manifest, this is needed for huge loads to avoid timeouts between the local server calling and redshift"
     :default 20
-    :valued [#(Integer/parseInt %) "Must be a number"]]
+    :parse-fn #(Integer/parseInt %)]
    ["-t" "--redshift-table redshift-table" "Redshift table"]
    ["-a" "--s3-access s3-access-key" "S3 access key"]
    ["-s" "--s3-secret s3-secret-key" "S3 secret key"]
    ["-x" "--s3-region s3-region" "S3 region see http://docs.aws.amazon.com/general/latest/gr/rande.html"
     :validate [#(RegionUtils/getRegion %) (str "Must be one of " (mapv str (RegionUtils/getRegions)))]]
+
    ["-b" "--s3-bucket s3-bucket" "S3 bucket key"]
    ["-z" "--s3-path s3-path" "S3 path key"]
    ["-y" "--hdfs-url fs-default" "Default hdfs name e.g hdfs://mynamenode"]
@@ -163,6 +165,9 @@
    ["-disable-redshift" "--disable-redshift" "if specified the the files are not uploaded to redshift"]
    ["-hdfs-s3-prefix-depth" "--hdfs-s3-prefix-depth number" "if specified the file name is <number levels of hdfs dir compressed e.g /a/b/c/file can be at number 2 b_c>_<hdfs_file_name>"
     :parse-fn #(when % (Integer/parseInt %))]
+
+   ["-format" "--format format" "AVRO, CSV, GZIP (gzip is gzip + csv)"
+    :default "csv"]
 
    ["-h" "--help"]])
 

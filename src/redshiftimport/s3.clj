@@ -73,7 +73,7 @@
                    (AmazonS3Client. ^BasicAWSCredentials creds)
                    (.setRegion ^Region region))
         ^TransferManager transfer-manager (TransferManager. s3client exec1)]
-    (.setMultipartUploadThreshold (.getConfiguration transfer-manager) (int (* TEN-MB 40)))
+    (.setMultipartUploadThreshold (.getConfiguration transfer-manager) (int (* TEN-MB 100)))
     (->Ctx s3client transfer-manager)))
 
 
