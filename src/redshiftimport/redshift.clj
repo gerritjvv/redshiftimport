@@ -23,7 +23,10 @@
                               "QUOTE AS '\"'"
                               "manifest"])
 
-(defmulti copy-format-options (fn [s] (string/lower-case (name s))))
+(defmulti copy-format-options (fn [s]
+                                (prn "Format options from " s)
+                                (when s
+                                  (string/lower-case (name s)))))
 
 (defmethod copy-format-options "gzip" [_]
   (string/join " " (conj default-csv-options
