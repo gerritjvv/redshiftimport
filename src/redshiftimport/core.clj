@@ -174,9 +174,6 @@
 (defn prn-help [data]
   (prn data))
 
-(defn test-options [& args]
-  (parse-opts args cli-options))
-
 (defn -main [& args]
   (let [{:keys [options errors summary]} (parse-opts args cli-options)]
     (prn "option " options)
