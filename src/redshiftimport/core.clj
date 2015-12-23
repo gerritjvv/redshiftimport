@@ -134,6 +134,8 @@
     (when delete-s3
       (doseq [s3-file s3-files]
         (s3/delete-file! s3-ctx s3-bucket s3-file)))
+
+    (s3/close s3-ctx)
     (prn "done")))
 
 ;;;;;;;;;;;;;;;;;;;
@@ -182,7 +184,6 @@
       (:help options) (prn-help summary)
       :default (try
                  (exec options)
-                 (System/exit (int 0))
                  (catch Exception e (do
                                       (.printStackTrace e)
                                       (prn "Error  " e)

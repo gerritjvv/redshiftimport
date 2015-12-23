@@ -62,6 +62,9 @@
   {:pre [client bucket file]}
   (.deleteObject client (str bucket) (str file)))
 
+(defn close [{:keys [^TransferManager transfer-manager]}]
+  (.shutdownNow transfer-manager true))
+
 (defn connect! [{:keys [access-key secret-key region exec]}]
   {:pre [(string? access-key) (string? secret-key) (string? region)]}
   (let [exec1 (if exec exec (Executors/newFixedThreadPool 4))
