@@ -93,6 +93,15 @@
 (defn create-manifest [s3-files]
   (redshift/manifest-file s3-files))
 
+(defn load-manifest [red-ctx s3-ctx redshift-table manifest s3-path s3-bucket s3-access s3-secret]
+  (let [^InputStream manifest-input (StringInputStream. ^String manifest)
+        manifest-filename (str s3-path "/manifest_" (System/nanoTime))
+        manifest-fqn (s3/as-s3-fqn (str s3-bucket "/"  manifest-filename))]
+    (prn "uploading manifest")
+    (s3/wait-on-upload! (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename}))
+    (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret)
+    (prn "done loading manifest")))
+
 (defn exec [{:keys [redshift-url
                     redshift-user
                     redshift-pwd
@@ -107,23 +116,22 @@
                     hdfs-s3-prefix-depth
                     threads
                     delete-s3
-                    disable-redshift]}]
-  (let [s3-ctx (s3/connect! {:access-key s3-access :secret-key s3-secret :region s3-region})
+                    disable-redshift
+                    manifest-size]}]
+  (let [manifest-size (if manifest-size manifest-size 20)
+        s3-ctx (s3/connect! {:access-key s3-access :secret-key s3-secret :region s3-region})
         hdfs-ctx (hdfs/connect! {:default-fs hdfs-url})
         red-ctx (when (not disable-redshift) (redshift/connect! redshift-url redshift-user redshift-pwd))
         s3-files (hdfs->s3 hdfs-ctx s3-ctx threads hdfs-path s3-bucket s3-path hdfs-s3-prefix-depth)
-        manifest (create-manifest s3-files)
-        ^InputStream manifest-input (StringInputStream. ^String manifest)
-        manifest-filename (str s3-path "/manifest_" (System/nanoTime))
-        manifest-fqn (s3/as-s3-fqn (str s3-bucket "/"  manifest-filename))]
+        manifests (map create-manifest (partition-all manifest-size s3-files))]
 
     (prn "Completed upload of " (count s3-files) " files to s3")
     (when (not disable-redshift)
-      (s3/wait-on-upload! (s3/stream->s3! s3-ctx manifest-input (.available manifest-input) {:bucket s3-bucket :file manifest-filename}))
-      (redshift/upload-as-manifest red-ctx redshift-table manifest-fqn s3-access s3-secret))
+      (doseq [manifest manifests]
+        (load-manifest red-ctx s3-ctx redshift-table manifest s3-path s3-bucket s3-access s3-secret)))
 
     (when delete-s3
-      (doseq [s3-file (conj s3-files manifest-filename)]
+      (doseq [s3-file s3-files]
         (s3/delete-file! s3-ctx s3-bucket s3-file)))
     (prn "done")))
 
@@ -134,6 +142,9 @@
   [["-r" "--redshift-url jdbc-redshift-url" "JDBC Redshift URL"]
    ["-u" "--redshift-user redshift-user" "JDBC Redshift User"]
    ["-p" "--redshift-pwd redshift-pwd" "JDBC Redshift Password"]
+   ["-manifest-size" "--manifest-size number" "Number of files grouped in each manifest, this is needed for huge loads to avoid timeouts between the local server calling and redshift"
+    :default 20
+    :valued [#(Integer/parseInt %) "Must be a number"]]
    ["-t" "--redshift-table redshift-table" "Redshift table"]
    ["-a" "--s3-access s3-access-key" "S3 access key"]
    ["-s" "--s3-secret s3-secret-key" "S3 secret key"]
@@ -164,4 +175,10 @@
     (cond
       errors (do (prn-help errors) (System/exit (int -1)))
       (:help options) (prn-help summary)
-      :default (exec options))))
+      :default (try
+                 (exec options)
+                 (System/exit (int 0))
+                 (catch Exception e (do
+                                      (.printStackTrace e)
+                                      (prn "Error  " e)
+                                      (System/exit (int -1))))))))
