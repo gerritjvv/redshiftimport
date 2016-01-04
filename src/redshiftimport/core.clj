@@ -8,7 +8,8 @@
            [com.amazonaws.regions RegionUtils]
            [com.amazonaws.util StringInputStream]
            [java.io InputStream]
-           [org.apache.commons.lang StringUtils]))
+           [org.apache.commons.lang StringUtils]
+           [clojure.lang ArityException]))
 
 
 (defn remove-double-slashes [s]
@@ -81,12 +82,42 @@
       (finally
         (.shutdown exec)))))
 
+(defn sleep [ms]
+  (Thread/sleep (long ms)))
+
+(defn retry
+  "Returns a function than when called with n will call f with args once and retry n times  in case of failure
+   f = (rery my-f arg arg arg)
+   (f 3 1000) == retry 3 times sleeping 1000ms between each retry
+   Note: ArityExceptions will not retry"
+  [f & args]
+  (fn inner [n sleep-ms]
+    (try
+      (apply f args)
+      (catch ArityException ar (throw ar))
+      (catch Exception e (if (pos? n)
+                           (do
+                             (prn "Retrying task sleeping for " sleep-ms "ms")
+                             (sleep sleep-ms)
+                             (inner (dec n) sleep-ms))
+                           (throw e))))))
+
+
+(defn hdfs->s3-retry [hdfs-ctx s3-ctx s3bucket s3path hdfs-s3-prefix-depth start-ts i hdfs-file]
+  (let [retry-f (retry hdfs-file->s3 hdfs-ctx hdfs-file s3-ctx s3bucket s3path hdfs-s3-prefix-depth start-ts i)]
+    (retry-f 5 5000)))
+
 (defn hdfs->s3
   "Copy all the hdfs files identified by the glob to the s3path"
   [hdfs-ctx s3-ctx threads hdfs-dir s3bucket s3path hdfs-s3-prefix-depth]
   (let [hdfs-files (hdfs/list-paths hdfs-ctx hdfs-dir)]
     (try
-      (doall (pmap2 threads #(hdfs-file->s3 hdfs-ctx %3 s3-ctx s3bucket s3path hdfs-s3-prefix-depth %1 %2) hdfs-files))
+      (doall (pmap2 threads (partial hdfs->s3-retry
+                                     hdfs-ctx
+                                     s3-ctx
+                                     s3bucket
+                                     s3path
+                                     hdfs-s3-prefix-depth) hdfs-files))
       (finally
         (prn "Done copying to s3")))))
 
