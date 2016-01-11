@@ -149,7 +149,8 @@
                     delete-s3
                     disable-redshift
                     manifest-size
-                    format]}]
+                    format
+                    redshift-vacuum]}]
   (let [manifest-size (if manifest-size manifest-size 20)
         s3-ctx (s3/connect! {:access-key s3-access :secret-key s3-secret :region s3-region})
         hdfs-ctx (hdfs/connect! {:default-fs hdfs-url})
@@ -161,6 +162,9 @@
     (when (not disable-redshift)
       (doseq [manifest manifests]
         (load-manifest red-ctx s3-ctx redshift-table manifest s3-path s3-bucket s3-access s3-secret format)))
+
+    (when redshift-vacuum
+      (redshift/vacuum! red-ctx redshift-table))
 
     (when delete-s3
       (doseq [s3-file s3-files]
@@ -201,6 +205,8 @@
 
    ["-format" "--format format" "AVRO, CSV, GZIP (gzip is gzip + csv)"
     :default "csv"]
+
+   ["-redshift-vacuum" "--redshift-vacuum" "If specified vacuum is run on the redshift table after every date has been imported"]
 
    ["-h" "--help"]])
 

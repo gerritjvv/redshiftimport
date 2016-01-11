@@ -6,6 +6,9 @@
             [clojure.string :as string]))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;; private functions
+
 (defn exec! [conn sql]
   (sjdbc/exec conn sql))
 
@@ -40,6 +43,10 @@
   (string/join " " default-csv-options))
 
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;; public api
+
 (defn upload-as-manifest [conn redshift-table manifest-path s3-access s3-secret format]
   (let [sql (str "copy " redshift-table " from  '" manifest-path "'"
                  " credentials"
@@ -50,6 +57,13 @@
     (prn "running redshift sql " sql)
     (exec! conn
            sql)))
+
+(defn vacuum!
+  "Call vacuum on the redshift table"
+  [conn table-name]
+  (let [sql (str "vacuum " table-name)]
+    (prn "running " sql)
+    (exec! conn sql)))
 
 (defn connect! [jdbc-url user pwd]
   (sjdbc/open jdbc-url user pwd {}))
