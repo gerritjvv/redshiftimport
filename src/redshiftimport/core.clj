@@ -7,7 +7,7 @@
   (:import [java.util.concurrent Executors ExecutorService Future]
            [com.amazonaws.regions RegionUtils]
            [com.amazonaws.util StringInputStream]
-           [java.io InputStream]
+           [java.io InputStream BufferedInputStream]
            [org.apache.commons.lang StringUtils]
            [clojure.lang ArityException]))
 
@@ -39,6 +39,11 @@
     (str (hdfs/choose-hdfs-prefix-dir hdfs-file hdfs-s3-prefix-depth) "_" (hdfs/file-name hdfs-file))
     (str (hdfs/file-name hdfs-file) "_" start-ts "_" i)))
 
+(defn buffered-inputstream
+  "Create a buffered input stream with a buffer of 3KB, the default amazon read limit is 128KB"
+  [^InputStream in]
+  (BufferedInputStream. in (int 3072)))
+
 (defn hdfs-file->s3
   "hdfs-ctx: the hdfs context
    s3-ctx : s3 context
@@ -50,7 +55,7 @@
   [hdfs-ctx hdfs-file s3-ctx s3bucket s3path hdfs-s3-prefix-depth start-ts i]
   (let [file-name (str s3path "/" (choose-file-name hdfs-file hdfs-s3-prefix-depth start-ts i))
         content-len (hdfs/content-length hdfs-ctx hdfs-file)
-        input (hdfs/input-stream hdfs-ctx hdfs-file)]
+        input (buffered-inputstream (hdfs/input-stream hdfs-ctx hdfs-file))]
     (prn "load to s3 file " (sanitise-s3-path (str s3bucket "/" file-name)) content-len)
 
     (try
