@@ -6,7 +6,7 @@
 
   :main redshiftimport.core
   :dependencies [[org.clojure/clojure "1.7.0"]
-                 [sjdbc "0.1.3"]
+                 [sjdbc "0.1.5"]
                  [org.clojure/data.json "0.2.6"]
                  [com.amazonaws/aws-java-sdk "1.10.41"]
                  [local/RedshiftJDBC41 "1.1.10.1010"]
