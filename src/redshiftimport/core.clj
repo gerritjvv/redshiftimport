@@ -59,9 +59,7 @@
     (prn "load to s3 file " (sanitise-s3-path (str s3bucket "/" file-name)) content-len)
 
     (try
-      (prn "calling s3/stream")
       (s3/wait-on-upload! (s3/stream->s3! s3-ctx input content-len {:bucket (sanitise-s3-path (remove-trailing-slash s3bucket)) :file (sanitise-s3-path (remove-starting-slash file-name))}))
-
       (finally
         (.close ^InputStream input)))
     (s3/as-s3-fqn (sanitise-s3-path (str s3bucket "/" file-name)))))
@@ -79,9 +77,7 @@
         deref
         (transduce (comp
                      (map #(.submit exec (submit-f start-ts (swap! counter-a inc) %)))
-                     (map #(delay (do
-                                    (prn "Waiting on future " %)
-                                    (.get ^Future %)))))
+                     (map #(delay (.get ^Future %))))
                    conj
                    coll))
       (finally
@@ -127,6 +123,7 @@
         (prn "Done copying to s3")))))
 
 (defn create-manifest [s3-files]
+  (prn "Create manifest with : " (count s3-files) " files")
   (redshift/manifest-file s3-files))
 
 (defn load-manifest [red-ctx s3-ctx redshift-table manifest s3-path s3-bucket s3-access s3-secret format]

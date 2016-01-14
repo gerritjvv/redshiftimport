@@ -63,7 +63,8 @@
   [conn table-name]
   (let [sql (str "vacuum " table-name)]
     (prn "running " sql)
-    (exec! conn sql)))
+    ;;remember we cannot run vacuum in a transaction
+    (sjdbc/no-transaction conn sql)))
 
 (defn connect! [jdbc-url user pwd]
   (sjdbc/open jdbc-url user pwd {}))
